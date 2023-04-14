@@ -131,13 +131,20 @@ def checkOverlap(readCigar, mateCigar, readFlag, mateFlag, minNonOverlap):
 
 
 def get_transcript(chrom, start):
-    if chrom in gtf_lookup:
-        for transcript, pos in gtf_lookup[chrom].items():
-            if pos[0] <= start and start <= int(pos[1]):
-                if len(pos) > 2:
-                    return [transcript, pos[2]]
-                else:
-                    return [transcript]
+    if chrom in gtf_lookup_hash:
+        start_str = str(start)
+        start_str_len = len(start_str)
+        while start_str_len < 9:
+            start_str = "0" + start_str
+            start_str_len += 1
+        key = start_str[:4]
+        if key in gtf_lookup_hash[chrom]:
+            for transcript, pos in gtf_lookup_hash[chrom][key]:
+                if pos[0] <= start and start <= int(pos[1]):
+                    if len(pos) > 2:
+                        return [transcript, pos[2]]
+                    else:
+                        return [transcript]
     return ''
 
 
@@ -199,6 +206,29 @@ split_reads = set()
 
 with open(args.gtf, 'r') as jsonfile:
     gtf_lookup = json.loads(jsonfile.read())
+    
+# Saving the gtf in a dict using the four first digits as a hash. Also add transcript to hash +1 to handle edge cases.
+# Can miss exons that are more than 100.000 bases long. Speeds up processing by a factor of 10.
+gtf_lookup_hash = {}
+for chrom in gtf_lookup:
+    for transcript, pos in gtf_lookup[chrom].items():
+        pos_start_str = str(pos[0])
+        pos_start_str_len = len(pos_start_str)
+        while pos_start_str_len < 9:
+            pos_start_str = "0" + pos_start_str
+            pos_start_str_len += 1
+        if not chrom in gtf_lookup_hash:
+            gtf_lookup_hash[chrom] = {}
+        key1 = pos_start_str[:4]
+        key2 = str(int(key1)+1)
+        while len(key2) < 4:
+            key2 = "0" + key2
+        keys = [key1, key2]
+        for key in keys:
+            if key in gtf_lookup_hash[chrom]:
+                gtf_lookup_hash[chrom][key].append([transcript, pos])
+            else:
+                gtf_lookup_hash[chrom][key] = [[transcript, pos]]
 
 # gtf_json = open("/proj/snic2020-6-4/sarath/Results/BeatAML/UCSC_hg19_wes_contigSize3000_bigLen130000_r76.json", "w")
 # gtf_json.write(json.dumps(gtf_lookup, indent = 4))
